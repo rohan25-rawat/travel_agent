@@ -186,7 +186,7 @@ Do not add unnecessary explanations.
 """
 
 try:
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=google_key, temperature=0.2)
+    llm = ChatGoogleGenerativeAI(model="gemini-3.5-flash-lite", google_api_key=google_key, temperature=0.2)
     agent = create_agent(
         model=llm,
         tools=[places_tool, weather_tool, search_tool],

@@ -1,4 +1,4 @@
-```python
+
 import streamlit as st
 import requests
 from tavily import TavilyClient
@@ -474,12 +474,9 @@ if st.session_state.messages:
                 st.error(
                     f"❌ Error: {e}"
                 )
-
-
 # ------------------------------------------------------------
 # CLEAR
 # ------------------------------------------------------------
-
 if st.sidebar.button(
     "🗑️ Clear Trip",
     use_container_width=True
@@ -487,4 +484,3 @@ if st.sidebar.button(
 
     st.session_state.messages = []
     st.rerun()
-```

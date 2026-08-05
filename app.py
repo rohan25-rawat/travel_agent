@@ -1,16 +1,14 @@
-
+```python
 import streamlit as st
 import requests
-
+from tavily import TavilyClient
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import tool
 from langchain.agents import create_agent
-from tavily import TavilyClient
 
-
-# ============================================================
+# ------------------------------------------------------------
 # PAGE
-# ============================================================
+# ------------------------------------------------------------
 
 st.set_page_config(
     page_title="AI Trip Planner",
@@ -19,15 +17,12 @@ st.set_page_config(
 )
 
 st.title("✈️ AI Trip Planner")
-st.caption(
-    "Plan personalized trips using Gemini + Geoapify + "
-    "Weather + Tavily."
-)
+st.caption("AI-powered travel planning with live web, weather and places data.")
 
 
-# ============================================================
-# SESSION STATE
-# ============================================================
+# ------------------------------------------------------------
+# SESSION
+# ------------------------------------------------------------
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -36,13 +31,13 @@ if "connected" not in st.session_state:
     st.session_state.connected = False
 
 
-# ============================================================
-# SIDEBAR
-# ============================================================
+# ------------------------------------------------------------
+# API KEYS
+# ------------------------------------------------------------
 
 with st.sidebar:
 
-    st.header("🔑 API Keys")
+    st.header("🔑 API Configuration")
 
     google_key = st.text_input(
         "Gemini API Key",
@@ -68,87 +63,77 @@ with st.sidebar:
         "🔌 Connect APIs",
         use_container_width=True
     ):
-        if not all([
+
+        if all([
             google_key,
             geo_key,
             tavily_key,
             weather_key
         ]):
-            st.error("Please enter all API keys.")
-        else:
+
             st.session_state.connected = True
-            st.success("✅ APIs connected!")
+            st.success("APIs connected!")
 
+        else:
 
-# ============================================================
-# STOP UNTIL API KEYS ARE ENTERED
-# ============================================================
+            st.error("Please enter all API keys.")
+
 
 if not st.session_state.connected:
 
-    st.info(
-        "👈 Enter your four API keys in the sidebar "
-        "and click **Connect APIs**."
-    )
-
+    st.info("👈 Enter your API keys in the sidebar.")
     st.stop()
 
 
-# ============================================================
-# GEOAPIFY
-# ============================================================
+# ------------------------------------------------------------
+# TOOLS
+# ------------------------------------------------------------
 
-def search_places(
-    lat,
-    lon,
-    category="tourism.sights",
-    radius=5000
-):
+def places(lat, lon, category="tourism.sights"):
 
     url = "https://api.geoapify.com/v2/places"
 
     params = {
         "categories": category,
-        "filter": f"circle:{lon},{lat},{radius}",
+        "filter": f"circle:{lon},{lat},10000",
         "limit": 10,
         "apiKey": geo_key
     }
 
     try:
+
         r = requests.get(
             url,
             params=params,
-            timeout=20
+            timeout=15
         )
 
         if r.status_code != 200:
             return {"error": r.text}
 
-        places = []
-
-        for item in r.json().get("features", []):
-
-            p = item.get("properties", {})
-
-            places.append({
-                "name": p.get("name", "Unknown"),
-                "address": p.get("formatted", ""),
-                "latitude": p.get("lat"),
-                "longitude": p.get("lon"),
-                "categories": p.get("categories", [])
-            })
-
-        return places
+        return [
+            {
+                "name": x["properties"].get(
+                    "name",
+                    "Unknown"
+                ),
+                "address": x["properties"].get(
+                    "formatted",
+                    ""
+                )
+            }
+            for x in r.json().get(
+                "features",
+                []
+            )
+        ]
 
     except Exception as e:
+
         return {"error": str(e)}
 
 
-# ============================================================
-# WEATHER
-# ============================================================
-
-def get_weather(city):
+def weather(city):
 
     url = "https://api.openweathermap.org/data/2.5/forecast"
 
@@ -159,40 +144,31 @@ def get_weather(city):
     }
 
     try:
+
         r = requests.get(
             url,
             params=params,
-            timeout=20
+            timeout=15
         )
 
         if r.status_code != 200:
             return {"error": r.text}
 
-        data = r.json()
-        result = []
-
-        for x in data.get("list", [])[:8]:
-
-            result.append({
-                "datetime": x.get("dt_txt"),
+        return [
+            {
+                "time": x.get("dt_txt"),
                 "temperature": x["main"].get("temp"),
-                "feels_like": x["main"].get("feels_like"),
-                "humidity": x["main"].get("humidity"),
-                "weather": x["weather"][0].get(
+                "condition": x["weather"][0].get(
                     "description"
-                ),
-                "rain_probability": x.get("pop", 0)
-            })
-
-        return result
+                )
+            }
+            for x in r.json().get("list", [])[:8]
+        ]
 
     except Exception as e:
+
         return {"error": str(e)}
 
-
-# ============================================================
-# TAVILY
-# ============================================================
 
 def web_search(query):
 
@@ -202,135 +178,154 @@ def web_search(query):
             api_key=tavily_key
         )
 
-        response = client.search(
+        return client.search(
             query=query,
             search_depth="advanced",
-            max_results=5,
-            include_answer=True
+            max_results=5
         )
 
-        return {
-            "answer": response.get("answer"),
-            "results": [
-                {
-                    "title": x.get("title"),
-                    "url": x.get("url"),
-                    "content": x.get("content")
-                }
-                for x in response.get("results", [])
-            ]
-        }
-
     except Exception as e:
+
         return {"error": str(e)}
 
 
-# ============================================================
+# ------------------------------------------------------------
 # LANGCHAIN TOOLS
-# ============================================================
+# ------------------------------------------------------------
 
 @tool
 def places_tool(
     lat: float,
     lon: float,
-    category: str = "tourism.sights",
-    radius: int = 5000
+    category: str = "tourism.sights"
 ):
-    """Find tourist attractions, restaurants and places."""
-    return search_places(
-        lat,
-        lon,
-        category,
-        radius
-    )
+    """Find tourist attractions and places."""
+    return places(lat, lon, category)
 
 
 @tool
 def weather_tool(city: str):
-    """Get the current forecast for a city."""
-    return get_weather(city)
+    """Get weather forecast for a city."""
+    return weather(city)
 
 
 @tool
-def travel_search(query: str):
-    """Search current travel information on the web."""
+def search_tool(query: str):
+    """Search current travel information."""
     return web_search(query)
 
 
-tools = [
-    places_tool,
-    weather_tool,
-    travel_search
-]
-
-
-# ============================================================
-# GEMINI AGENT
-# ============================================================
+# ------------------------------------------------------------
+# AGENT
+# ------------------------------------------------------------
 
 try:
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash-lite",
+        model="gemini-2.5-flash-lite",
         google_api_key=google_key,
-        temperature=0.3
+        temperature=0.2
     )
 
     agent = create_agent(
         model=llm,
-        tools=tools,
+        tools=[
+            places_tool,
+            weather_tool,
+            search_tool
+        ],
         system_prompt="""
-You are an expert AI Trip Planner.
+You are a professional AI Trip Planner.
 
-Create realistic, personalized and
-budget-conscious travel itineraries.
+Create practical day-wise itineraries.
 
-Use your tools whenever useful.
+Use your tools when useful.
 
-Use:
-- places_tool for attractions/restaurants
-- weather_tool for weather
-- travel_search for current travel information
+Consider:
+- destination
+- budget
+- number of days
+- attractions
+- restaurants
+- weather
+- current travel information
 
-Consider destination, budget, days,
-interests, travel style, weather and
-travel time.
+Group nearby locations together.
 
-Group nearby places together.
+Keep the itinerary realistic.
 
-Avoid overcrowding each day.
+IMPORTANT:
+Return ONLY clean Markdown.
 
-For each day include:
+Use exactly this structure:
 
-Morning
-Afternoon
-Evening
-Places
-Food
-Estimated cost
-Weather considerations
+# ✈️ Trip Summary
 
-Also provide:
+**Destination:** ...
+**Duration:** ...
+**Budget:** ...
 
-Total estimated budget
-Food recommendations
-Travel tips
-Current travel information
+---
 
-Do not invent current information
-when it can be checked using tools.
+# 📅 Day 1
+
+### 🌅 Morning
+**Place:** ...
+**Activity:** ...
+**Estimated Cost:** ...
+
+### ☀️ Afternoon
+**Place:** ...
+**Activity:** ...
+**Estimated Cost:** ...
+
+### 🌆 Evening
+**Place:** ...
+**Activity:** ...
+**Estimated Cost:** ...
+
+### 🍴 Food
+...
+
+### 🌤️ Weather
+...
+
+---
+
+Repeat the same format for every day.
+
+At the end provide:
+
+# 💰 Budget Summary
+
+| Category | Estimated Cost |
+|---|---:|
+| Accommodation | ... |
+| Food | ... |
+| Transport | ... |
+| Attractions | ... |
+| Other | ... |
+| **Total** | **...** |
+
+# 💡 Travel Tips
+
+- ...
+- ...
+- ...
+
+Do not add unnecessary explanations.
 """
     )
 
 except Exception as e:
 
-    st.error(f"Agent error: {e}")
+    st.error(f"Agent initialization error: {e}")
     st.stop()
 
 
-# ============================================================
-# TRIP INPUTS
-# ============================================================
+# ------------------------------------------------------------
+# TRIP INPUT
+# ------------------------------------------------------------
 
 st.sidebar.divider()
 st.sidebar.header("🌍 Trip Details")
@@ -348,106 +343,49 @@ budget = st.sidebar.number_input(
 )
 
 days = st.sidebar.number_input(
-    "📅 Days",
+    "📅 Number of Days",
     min_value=1,
-    max_value=30,
+    max_value=15,
     value=3
 )
 
-interests = st.sidebar.multiselect(
-    "❤️ Interests",
-    [
-        "History",
-        "Food",
-        "Photography",
-        "Nature",
-        "Adventure",
-        "Shopping",
-        "Beaches",
-        "Nightlife",
-        "Culture"
-    ],
-    default=["History", "Food"]
-)
 
-style = st.sidebar.selectbox(
-    "🚗 Travel Style",
-    [
-        "Budget-friendly",
-        "Comfort",
-        "Luxury"
-    ]
-)
-
-
-# ============================================================
-# GENERATE
-# ============================================================
+# ------------------------------------------------------------
+# GENERATE ITINERARY
+# ------------------------------------------------------------
 
 if st.sidebar.button(
-    "✨ Generate Itinerary",
+    "✨ Generate Trip",
     use_container_width=True
 ):
 
     if not destination:
-        st.warning("Please enter a destination.")
-        st.stop()
 
-    if not interests:
-        st.warning("Select at least one interest.")
+        st.warning(
+            "Please enter a destination."
+        )
         st.stop()
-
-    interest_text = ", ".join(interests)
 
     prompt = f"""
-Plan a complete {days}-day trip.
+Plan a {days}-day trip to {destination}.
 
-Destination: {destination}
 Budget: ₹{budget}
-Interests: {interest_text}
-Travel style: {style}
 
-Use your tools to research the destination.
+Use your tools to get current information.
 
-Create a realistic day-wise itinerary.
+Research:
+1. Tourist attractions
+2. Restaurants / food
+3. Weather
+4. Current travel information
 
-For every day include:
+Create a realistic itinerary.
 
-### Day X
-**Morning**
-- Activity
-- Place
-- Cost
+Keep the total estimated cost
+within ₹{budget} where possible.
 
-**Afternoon**
-- Activity
-- Place
-- Cost
-
-**Evening**
-- Activity
-- Place
-- Cost
-
-**Food**
-- Recommendations
-
-**Weather**
-- Weather considerations
-
-Also provide:
-
-### Budget Breakdown
-- Accommodation
-- Food
-- Transport
-- Attractions
-- Miscellaneous
-
-### Travel Tips
-Include useful current information.
-
-Try to stay within the user's budget.
+Follow the exact Markdown format
+defined in your system instructions.
 """
 
     st.session_state.messages = [
@@ -458,7 +396,7 @@ Try to stay within the user's budget.
     ]
 
     with st.spinner(
-        "🤖 Planning your trip..."
+        "🤖 Creating your itinerary..."
     ):
 
         try:
@@ -467,14 +405,14 @@ Try to stay within the user's budget.
                 "messages": st.session_state.messages
             })
 
-            answer = response["messages"][-1].content
+            answer = response[
+                "messages"
+            ][-1].content
 
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": answer
             })
-
-            st.success("🎉 Itinerary ready!")
 
             st.markdown(answer)
 
@@ -485,9 +423,9 @@ Try to stay within the user's budget.
             )
 
 
-# ============================================================
-# FOLLOW-UP CHAT
-# ============================================================
+# ------------------------------------------------------------
+# FOLLOW-UP
+# ------------------------------------------------------------
 
 if st.session_state.messages:
 
@@ -496,23 +434,22 @@ if st.session_state.messages:
     st.subheader("💬 Modify Your Trip")
 
     st.caption(
-        "Example: Make Day 2 cheaper, add restaurants, "
-        "or replace an outdoor activity."
+        "Example: Make Day 2 cheaper or replace a restaurant."
     )
 
-    user_message = st.chat_input(
-        "Ask something about your trip..."
+    message = st.chat_input(
+        "Ask the trip planner..."
     )
 
-    if user_message:
+    if message:
 
         st.session_state.messages.append({
             "role": "user",
-            "content": user_message
+            "content": message
         })
 
         with st.spinner(
-            "🤖 Updating your itinerary..."
+            "🤖 Updating..."
         ):
 
             try:
@@ -521,7 +458,9 @@ if st.session_state.messages:
                     "messages": st.session_state.messages
                 })
 
-                answer = response["messages"][-1].content
+                answer = response[
+                    "messages"
+                ][-1].content
 
                 st.session_state.messages.append({
                     "role": "assistant",
@@ -537,15 +476,15 @@ if st.session_state.messages:
                 )
 
 
-# ============================================================
+# ------------------------------------------------------------
 # CLEAR
-# ============================================================
+# ------------------------------------------------------------
 
 if st.sidebar.button(
-    "🗑️ Clear Conversation",
+    "🗑️ Clear Trip",
     use_container_width=True
 ):
 
     st.session_state.messages = []
     st.rerun()
-
+```

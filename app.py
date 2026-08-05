@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import requests
 from tavily import TavilyClient
@@ -207,8 +208,52 @@ budget = st.sidebar.number_input("💰 Budget (INR)", min_value=1000, value=2000
 days = st.sidebar.number_input("📅 Number of Days", min_value=1, max_value=15, value=3)
 
 # ------------------------------------------------------------
-# HELPER: RUN AGENT
+# HELPER: FORMATTED OUTPUT
 # ------------------------------------------------------------
+
+def render_itinerary(markdown_text):
+    """Split the model's top-level '# ' sections and render each with
+    dedicated Streamlit widgets instead of one long markdown blob."""
+
+    parts = re.split(r"(?m)^# (.+)$", markdown_text)
+    sections = list(zip(parts[1::2], parts[2::2]))
+
+    if not sections:
+        st.markdown(markdown_text)
+        return
+
+    for title, body in sections:
+        body = body.strip()
+        clean_title = re.sub(r"[^\w\s]", "", title).strip()
+
+        if "Trip Summary" in title:
+            st.markdown(f"### {title}")
+            dest = re.search(r"\*\*Destination:\*\*\s*(.+)", body)
+            dur = re.search(r"\*\*Duration:\*\*\s*(.+)", body)
+            bud = re.search(r"\*\*Budget:\*\*\s*(.+)", body)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("📍 Destination", dest.group(1).strip() if dest else "—")
+            c2.metric("📅 Duration", dur.group(1).strip() if dur else "—")
+            c3.metric("💰 Budget", bud.group(1).strip() if bud else "—")
+            st.divider()
+
+        elif re.match(r"Day\s+\d+", clean_title):
+            with st.expander(f"{title}", expanded=("Day 1" in title)):
+                st.markdown(body)
+
+        elif "Budget Summary" in title:
+            st.markdown(f"### {title}")
+            st.markdown(body)
+            st.divider()
+
+        elif "Travel Tips" in title:
+            st.markdown(f"### {title}")
+            st.markdown(body)
+
+        else:
+            st.markdown(f"### {title}")
+            st.markdown(body)
+
 
 def run_agent(prompt_text, spinner_text):
     st.session_state.messages.append({"role": "user", "content": prompt_text})
@@ -217,7 +262,7 @@ def run_agent(prompt_text, spinner_text):
             response = agent.invoke({"messages": st.session_state.messages})
             answer = response["messages"][-1].content
             st.session_state.messages.append({"role": "assistant", "content": answer})
-            st.markdown(answer)
+            render_itinerary(answer)
         except Exception as e:
             st.error(f"❌ Error: {e}")
 

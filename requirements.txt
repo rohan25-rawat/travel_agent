@@ -1,0 +1,6 @@
+streamlit
+requests
+langchain
+langchain-core
+langchain-google-genai
+tavily-python

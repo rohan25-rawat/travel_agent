@@ -255,12 +255,28 @@ def render_itinerary(markdown_text):
             st.markdown(body)
 
 
+def extract_text(content):
+    """LangChain message .content can be a plain string or a list of
+    content blocks. Normalize either case to a single string."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                parts.append(block.get("text", ""))
+        return "\n".join(parts)
+    return str(content)
+
+
 def run_agent(prompt_text, spinner_text):
     st.session_state.messages.append({"role": "user", "content": prompt_text})
     with st.spinner(spinner_text):
         try:
             response = agent.invoke({"messages": st.session_state.messages})
-            answer = response["messages"][-1].content
+            answer = extract_text(response["messages"][-1].content)
             st.session_state.messages.append({"role": "assistant", "content": answer})
             render_itinerary(answer)
         except Exception as e:

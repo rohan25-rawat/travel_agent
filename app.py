@@ -22,7 +22,7 @@ from reportlab.lib.units import cm
 st.set_page_config(page_title="AI Trip Planner", page_icon="✈️", layout="wide")
 
 # ------------------------------------------------------------
-# STYLING (static black & red theme, no animations)
+# STYLING (static black & red theme)
 # ------------------------------------------------------------
 
 st.markdown(

@@ -1,6 +1,16 @@
 import re
 import io
+import sys
 from datetime import date
+
+# Force UTF-8 stdout/stderr. On Windows, the console often defaults to
+# cp1252/ascii, which raises UnicodeEncodeError as soon as any emoji or
+# non-ASCII character (₹, ✈️, etc.) gets printed/logged.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 import requests
 import streamlit as st
@@ -22,14 +32,19 @@ from reportlab.lib.units import cm
 st.set_page_config(page_title="AI Trip Planner", page_icon="✈️", layout="wide")
 
 # ------------------------------------------------------------
-# STYLING (static black & red theme)
+# STYLING (dark theme, muted red)
 # ------------------------------------------------------------
 
 st.markdown(
     """
     <style>
     .stApp {
-        background: linear-gradient(135deg, #000000 0%, #1a0000 35%, #4d0000 70%, #8b0000 100%);
+        background-image:
+            linear-gradient(rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.72)),
+            url('https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=1920&q=80');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
         background-attachment: fixed;
     }
 
@@ -37,7 +52,7 @@ st.markdown(
         font-size: 2.6rem;
         font-weight: 800;
         color: #ffffff;
-        text-shadow: 0 0 10px rgba(255, 0, 0, 0.6);
+        text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
         margin-bottom: 0;
         position: relative;
         z-index: 2;
@@ -45,7 +60,7 @@ st.markdown(
     .trip-caption {
         position: relative;
         z-index: 2;
-        color: #f1c6c6;
+        color: #e6e6e6;
         font-size: 1.05rem;
     }
 
@@ -67,7 +82,7 @@ st.markdown(
     }
 
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a0000 0%, #000000 100%);
+        background: rgba(0, 0, 0, 0.85);
     }
     section[data-testid="stSidebar"] * {
         color: #f5f5f5 !important;
@@ -85,7 +100,7 @@ st.markdown(
         color: #ffffff;
     }
     div[data-testid="stMetric"] {
-        background: rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.1);
         border-radius: 10px;
         padding: 10px;
     }
@@ -358,7 +373,7 @@ IMPORTANT: Return ONLY clean Markdown using exactly this structure:
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm)
         styles = getSampleStyleSheet()
-        h1 = ParagraphStyle("H1", parent=styles["Heading1"], textColor=colors.HexColor("#8b0000"))
+        h1 = ParagraphStyle("H1", parent=styles["Heading1"], textColor=colors.HexColor("#1a6b2e"))
         h3 = ParagraphStyle("H3", parent=styles["Heading3"], textColor=colors.HexColor("#1a1a1a"))
         body = styles["BodyText"]
         story = []
